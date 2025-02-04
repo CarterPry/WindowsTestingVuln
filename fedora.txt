@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# 1. Install xrdp and necessary dependencies
+sudo dnf install -y xrdp tigervnc-server
+
+# 2. Enable xrdp to start at boot
+sudo systemctl enable xrdp --now
+
+# 3. Set xrdp to run on port 64432
+sudo sed -i 's/^port=.*/port=64432/' /etc/xrdp/xrdp.ini
+
+# 4. Create a new user "xroot" with no password
+sudo useradd -m -s /bin/bash xroot
+sudo passwd -d xroot
+
+# 5. Allow xroot login without a password in xrdp
+sudo sed -i '/^\[Xorg\]/a username=xroot\npassword=none' /etc/xrdp/xrdp.ini
+
+# 6. Disable password authentication
+sudo sed -i 's/^auth\s\+required\s\+pam_unix.so/#&/' /etc/pam.d/xrdp-sesman
+sudo sed -i '/^\[Security\]/,/^\[/ s/^AllowRootLogin=.*/AllowRootLogin=1/; s/^AlwaysGroupCheck=.*/AlwaysGroupCheck=false/; s/^PasswordPolicy=.*/PasswordPolicy=0/' /etc/xrdp/sesman.ini
+
+# 7. Ensure xroot has a valid session
+echo "exec startxfce4" | sudo tee /home/xroot/.xsession > /dev/null
+sudo chown xroot:xroot /home/xroot/.xsession
+sudo chmod +x /home/xroot/.xsession
+
+# 8. Open port 64432 in the firewall
+sudo firewall-cmd --permanent --add-port=64432/tcp
+sudo firewall-cmd --reload
+
+# 9. Restart xrdp to apply changes
+sudo systemctl restart xrdp
+
+# 10. Verify xrdp is running on the correct port
+sudo ss -tulpn | grep xrdp
+
+echo "✅ xrdp is installed, configured on port 64432, and set up for xroot with no password authentication!"
