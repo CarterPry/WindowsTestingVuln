@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# It's almost time
+
+
 # 1. Update system and install xrdp with dependencies
 sudo apt update && sudo apt install -y xrdp xfce4 xfce4-terminal xorg dbus-x11 x11-xserver-utils
 
