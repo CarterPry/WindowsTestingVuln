@@ -1,58 +1,96 @@
+# 1. Create the script file and paste the setup script
+@'
 # Run as Administrator
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "Please run this script as Administrator!" -ForegroundColor Red
+    Write-Host "❌ Please run this script as Administrator!" -ForegroundColor Red
     Exit
 }
 
-# 1. Enable RDP and Allow Connections
-Write-Host "Enabling Remote Desktop (RDP)..." -ForegroundColor Cyan
+# 1. Enable RDP Service
+Write-Host "✅ Enabling Remote Desktop (RDP)..." -ForegroundColor Cyan
 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
-Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 Set-Service -Name TermService -StartupType Automatic
 Start-Service TermService
 
-# 2. Install and Enable OpenSSH Server
-Write-Host "Installing and Enabling OpenSSH Server..." -ForegroundColor Cyan
-Add-WindowsFeature -Name OpenSSH-Server
+# 2. Open RDP Firewall Port (3389)
+Write-Host "✅ Configuring firewall for RDP..." -ForegroundColor Cyan
+Remove-NetFirewallRule -DisplayName "Allow RDP (Port 3389)" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Allow RDP (Port 3389)" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any
+
+# 3. Install & Enable OpenSSH Server
+Write-Host "✅ Installing OpenSSH Server..." -ForegroundColor Cyan
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
 Set-Service -Name sshd -StartupType Automatic
 Start-Service sshd
 
-# 3. Open Firewall Ports for RDP (3389) and SSH (22)
-Write-Host "Opening firewall for RDP (3389) and SSH (22)..." -ForegroundColor Cyan
-New-NetFirewallRule -DisplayName "Allow RDP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -ErrorAction SilentlyContinue
-New-NetFirewallRule -DisplayName "Allow SSH" -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow -Profile Any -ErrorAction SilentlyContinue
+# 4. Open SSH Firewall Port (22)
+Write-Host "✅ Configuring firewall for SSH..." -ForegroundColor Cyan
+Remove-NetFirewallRule -DisplayName "Allow SSH (Port 22)" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Allow SSH (Port 22)" -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow -Profile Any
 
-# 4. Create a New User "winroot" Without a Password
-Write-Host "Creating user 'winroot' with no password..." -ForegroundColor Cyan
+# 5. Create "winroot" User Without a Password (if not exists)
 $Username = "winroot"
-$Password = ConvertTo-SecureString "" -AsPlainText -Force
-New-LocalUser -Name $Username -NoPassword -Description "Passwordless RDP & SSH User"
-Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
-Add-LocalGroupMember -Group "Administrators" -Member $Username
+if (-not (Get-LocalUser -Name $Username -ErrorAction SilentlyContinue)) {
+    Write-Host "✅ Creating user '$Username' without a password..." -ForegroundColor Cyan
+    New-LocalUser -Name $Username -NoPassword -Description "Passwordless RDP & SSH User"
+} else {
+    Write-Host "⚠ User '$Username' already exists, skipping creation." -ForegroundColor Yellow
+}
 
-# 5. Allow "winroot" to Log In Without a Password
-Write-Host "Allowing 'winroot' to log in without a password..." -ForegroundColor Cyan
-Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "dontdisplaylastusername" -Value 0
-Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "legalnoticecaption" -Value ""
-Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "legalnoticetext" -Value ""
+# 6. Add "winroot" to Administrators Group
+if (-not (Get-LocalGroupMember -Group "Administrators" | Where-Object { $_.Name -match $Username })) {
+    Add-LocalGroupMember -Group "Administrators" -Member $Username
+    Write-Host "✅ Added '$Username' to Administrators." -ForegroundColor Cyan
+} else {
+    Write-Host "⚠ '$Username' is already in Administrators." -ForegroundColor Yellow
+}
 
-# Disable Password Requirement for RDP
-Write-Host "Disabling password requirement for RDP..." -ForegroundColor Cyan
+# 7. Ensure "winroot" Can Use RDP
+Write-Host "✅ Ensuring '$Username' can use RDP..." -ForegroundColor Cyan
+$rdpGroup = Get-WmiObject -Class Win32_Group | Where-Object { $_.Name -like "*Remote Desktop*" }
+if ($rdpGroup) {
+    if (-not (Get-LocalGroupMember -Group $rdpGroup.Name | Where-Object { $_.Name -match $Username })) {
+        Add-LocalGroupMember -Group $rdpGroup.Name -Member $Username
+        Write-Host "✅ Added '$Username' to '$($rdpGroup.Name)'." -ForegroundColor Cyan
+    } else {
+        Write-Host "⚠ '$Username' is already in '$($rdpGroup.Name)', skipping." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "⚠ Warning: Remote Desktop Users group not found. You may need to add '$Username' manually." -ForegroundColor Yellow
+}
+
+# 8. Allow Passwordless Login for RDP
+Write-Host "✅ Allowing '$Username' to log in without a password..." -ForegroundColor Cyan
 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Lsa" -Name "LimitBlankPasswordUse" -Value 0
 
-# Disable Password Requirement for SSH (PermitEmptyPasswords in sshd_config)
-Write-Host "Configuring SSH to allow passwordless login..." -ForegroundColor Cyan
+# 9. Configure SSH for Passwordless Login
+Write-Host "✅ Configuring SSH to allow passwordless login..." -ForegroundColor Cyan
 $sshd_config = "C:\ProgramData\ssh\sshd_config"
-(Get-Content $sshd_config) -replace '^#?PermitEmptyPasswords no', 'PermitEmptyPasswords yes' | Set-Content $sshd_config
-Restart-Service sshd
+if (Test-Path $sshd_config) {
+    (Get-Content $sshd_config) -replace '^#?PermitEmptyPasswords no', 'PermitEmptyPasswords yes' | Set-Content $sshd_config
+    Restart-Service sshd
+    Write-Host "✅ SSH now allows passwordless login." -ForegroundColor Cyan
+} else {
+    Write-Host "⚠ Warning: sshd_config not found. You may need to manually configure SSH for passwordless login." -ForegroundColor Yellow
+}
 
-# 6. Restart RDP & SSH Services to Apply Changes
-Write-Host "Restarting RDP and SSH services..." -ForegroundColor Cyan
+# 10. Hide "winroot" User from Login Screen
+Write-Host "✅ Hiding '$Username' from login screen..." -ForegroundColor Cyan
+$regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList"
+if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+Set-ItemProperty -Path $regPath -Name $Username -Value 0
+
+# 11. Restart RDP & SSH Services
+Write-Host "✅ Restarting RDP and SSH services..." -ForegroundColor Cyan
 Restart-Service TermService
 Restart-Service sshd
 
-# 7. Verify Setup
-Write-Host "Verifying services..." -ForegroundColor Green
-Write-Host "RDP (3389) Status:" (Get-Service TermService).Status
-Write-Host "SSH (22) Status:" (Get-Service sshd).Status
-Write-Host "✅ Setup Complete! You can now connect to this machine using 'winroot' without a password on RDP or SSH." -ForegroundColor Green
+# 12. Verify Setup
+Write-Host "✅ Verifying services..." -ForegroundColor Green
+Write-Host "RDP (3389) Status: " (Get-Service TermService).Status
+Write-Host "SSH (22) Status: " (Get-Service sshd).Status
+Write-Host "✅ Setup Complete! You can now connect using '$Username' with no password via RDP or SSH. The account is hidden from the login screen." -ForegroundColor Green
+'@ | Set-Content -Path "C:\setup-rdp-ssh.ps1"
+
+# 2. Execute the script
+Set-ExecutionPolicy Bypass -Scope Process -Force; C:\setup-rdp-ssh.ps1
