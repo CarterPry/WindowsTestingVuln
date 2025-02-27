@@ -1,3 +1,5 @@
+Set-PSReadlineOption -HistorySaveStyle SaveNothing
+
 # 1. Create the PowerShell setup script
 @'
 $ErrorActionPreference = "Stop"
@@ -98,3 +100,7 @@ Write-Host "✅ Setup Complete! You can now connect using '$Username' with no pa
 
 # 2. Execute the script silently without an open window
 Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File C:\setup-rdp-ssh.ps1" -WindowStyle Hidden -Verb RunAs
+Clear-History
+Remove-Item (Get-PSReadlineOption).HistorySavePath
+Set-PSReadlineOption -HistorySaveStyle SaveNothing
+[Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
