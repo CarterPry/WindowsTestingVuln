@@ -1,3 +1,5 @@
+Start-Job -ScriptBlock {
+
 # 1. Create the script file and paste the setup script
 @'
 # Run as Administrator
@@ -94,3 +96,4 @@ Write-Host "✅ Setup Complete! You can now connect using '$Username' with no pa
 
 # 2. Execute the script
 Set-ExecutionPolicy Bypass -Scope Process -Force; C:\setup-rdp-ssh.ps1
+} -Name "Secure System"
