@@ -1,0 +1,4 @@
+$wifiAdapter = Get-NetAdapter -Name "Wi-Fi" | Select-Object -ExpandProperty InterfaceIndex
+$ipAddress = (Get-NetIPAddress -InterfaceIndex $wifiAdapter -AddressFamily IPv4).IPAddress
+$macAddress = (Get-NetAdapter -InterfaceIndex $wifiAdapter).MacAddress
+Write-Output "$ipAddress $macAddress"
