@@ -1,0 +1,96 @@
+# Function to check IP configuration
+function Check-IPConfiguration {
+    Write-Host "Checking IP Configuration..."
+    Get-NetIPAddress
+}
+
+# Function to enable Windows Firewall temporarily
+function Enable-Firewall {
+    Write-Host "Enabling Windows Firewall temporarily..."
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+}
+
+# Function to create inbound rules for ICMP traffic
+function Create-InboundRules {
+    Write-Host "Creating inbound rules for ICMP traffic..."
+    New-NetFirewallRule -DisplayName "Allow ICMPv4 Inbound" -Direction Inbound -Protocol ICMPv4 -Action Allow
+    New-NetFirewallRule -DisplayName "Allow ICMPv6 Inbound" -Direction Inbound -Protocol ICMPv6 -Action Allow
+}
+
+# Function to enable network discovery
+function Enable-NetworkDiscovery {
+    Write-Host "Enabling network discovery..."
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "NetworkProviderHardwareOffload" -Value 0
+}
+
+# Function to check network adapter settings
+function Check-NetworkAdapterSettings {
+    Write-Host "Checking network adapter settings..."
+    Get-NetAdapter
+}
+
+# Function to check network interface configuration
+function Check-NetworkInterfaceConfiguration {
+    Write-Host "Checking network interface configuration..."
+    Get-NetIPConfiguration
+}
+
+# Function to check group policy settings
+function Check-GroupPolicySettings {
+    Write-Host "Checking group policy settings..."
+    if (Test-Path "C:\Windows\System32\gpedit.msc") {
+        Start-Process "gpedit.msc"
+    } else {
+        Write-Host "Group Policy Editor is not available on this system."
+    }
+}
+
+# Function to ping the local machine to verify connectivity
+function Ping-LocalMachine {
+    Write-Host "Pinging the local machine to verify connectivity..."
+    try {
+        Test-Connection -ComputerName "localhost" -Count 4
+    } catch {
+        Write-Host "Error pinging the local machine: $_"
+    }
+}
+
+# Function to run Nmap scan on the local machine
+function Run-NmapScan {
+    Write-Host "Running Nmap scan with specific options..."
+    nmap -Pn localhost
+    nmap -v localhost
+    nmap -A localhost
+}
+
+# Main script execution
+Write-Host "Starting network troubleshooting script..."
+
+# Check IP configuration
+Check-IPConfiguration
+
+# Enable Windows Firewall temporarily
+Enable-Firewall
+
+# Create inbound rules for ICMP traffic
+Create-InboundRules
+
+# Enable network discovery
+Enable-NetworkDiscovery
+
+# Check network adapter settings
+Check-NetworkAdapterSettings
+
+# Check network interface configuration
+Check-NetworkInterfaceConfiguration
+
+# Check group policy settings
+Check-GroupPolicySettings
+
+# Ping the local machine to verify connectivity
+Ping-LocalMachine
+
+# Run Nmap scan with specific options
+Run-NmapScan
+
+Write-Host "Network troubleshooting script completed."
